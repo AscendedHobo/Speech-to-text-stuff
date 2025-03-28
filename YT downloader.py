@@ -1,18 +1,19 @@
 import os
 import re
-import json
 import threading
 import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-DEFAULT_OUTPUT_DIR = r"D:\YTDLP"  # default output directory
+DEFAULT_OUTPUT_DIR = r"D:\YTDLP"
 
-class YTDownloaderApp:
+class SimpleDownloaderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("YT Downloader")
+        self.root.title("Simple YT Downloader")
         self.process = None
+        self.downloaded_file = None
+        # No quality selection UI; always pick highest quality AV stream for MP4.
         self.create_widgets()
         
     def create_widgets(self):
@@ -22,133 +23,148 @@ class YTDownloaderApp:
         self.url_entry = ttk.Entry(url_frame, width=80)
         self.url_entry.pack(side="left", padx=5, pady=5, expand=True, fill="x")
         
-        # Time Segment Frame
-        time_frame = ttk.LabelFrame(self.root, text="Time Segment (Optional, HH:MM:SS)")
+        # Time Segment Frame (with separate HH, MM, SS boxes)
+        time_frame = ttk.LabelFrame(self.root, text="Time Segment (Optional)")
         time_frame.pack(fill="x", padx=10, pady=5)
-        ttk.Label(time_frame, text="Start:").pack(side="left", padx=5)
-        self.start_time_entry = ttk.Entry(time_frame, width=10)
-        self.start_time_entry.pack(side="left", padx=5)
-        ttk.Label(time_frame, text="End:").pack(side="left", padx=5)
-        self.end_time_entry = ttk.Entry(time_frame, width=10)
-        self.end_time_entry.pack(side="left", padx=5)
+        # Start Time
+        start_frame = ttk.Frame(time_frame)
+        start_frame.pack(fill="x", padx=5, pady=2)
+        ttk.Label(start_frame, text="Start (HH MM SS):").pack(side="left")
+        self.start_h = ttk.Entry(start_frame, width=3)
+        self.start_h.pack(side="left", padx=(5,0))
+        ttk.Label(start_frame, text=":").pack(side="left")
+        self.start_m = ttk.Entry(start_frame, width=3)
+        self.start_m.pack(side="left")
+        ttk.Label(start_frame, text=":").pack(side="left")
+        self.start_s = ttk.Entry(start_frame, width=3)
+        self.start_s.pack(side="left")
+        # End Time
+        end_frame = ttk.Frame(time_frame)
+        end_frame.pack(fill="x", padx=5, pady=2)
+        ttk.Label(end_frame, text="End   (HH MM SS):").pack(side="left")
+        self.end_h = ttk.Entry(end_frame, width=3)
+        self.end_h.pack(side="left", padx=(5,0))
+        ttk.Label(end_frame, text=":").pack(side="left")
+        self.end_m = ttk.Entry(end_frame, width=3)
+        self.end_m.pack(side="left")
+        ttk.Label(end_frame, text=":").pack(side="left")
+        self.end_s = ttk.Entry(end_frame, width=3)
+        self.end_s.pack(side="left")
         
-        # Options Frame
-        options_frame = ttk.LabelFrame(self.root, text="Options")
-        options_frame.pack(fill="x", padx=10, pady=5)
-        self.audio_only_var = tk.BooleanVar()
+        # Options Frame: only Playlist, Download Subs, Subs Only
+        opts_frame = ttk.LabelFrame(self.root, text="Options")
+        opts_frame.pack(fill="x", padx=10, pady=5)
         self.playlist_var = tk.BooleanVar()
-        self.write_subs_var = tk.BooleanVar()
-        self.write_auto_subs_var = tk.BooleanVar()
+        ttk.Checkbutton(opts_frame, text="Playlist", variable=self.playlist_var).pack(side="left", padx=5)
+        self.subs_var = tk.BooleanVar()
+        ttk.Checkbutton(opts_frame, text="Download Subs", variable=self.subs_var).pack(side="left", padx=5)
+        self.subs_only_var = tk.BooleanVar()
+        ttk.Checkbutton(opts_frame, text="Subs Only", variable=self.subs_only_var).pack(side="left", padx=5)
         
-        ttk.Checkbutton(options_frame, text="Audio Only", variable=self.audio_only_var).pack(side="left", padx=5)
-        ttk.Checkbutton(options_frame, text="Playlist", variable=self.playlist_var).pack(side="left", padx=5)
-        ttk.Checkbutton(options_frame, text="Download Subtitles", variable=self.write_subs_var).pack(side="left", padx=5)
-        ttk.Checkbutton(options_frame, text="Download Auto-Subs", variable=self.write_auto_subs_var).pack(side="left", padx=5)
-        
-        # Format Selection Frame
-        format_frame = ttk.LabelFrame(self.root, text="Output Format")
-        format_frame.pack(fill="x", padx=10, pady=5)
-        ttk.Label(format_frame, text="Format:").pack(side="left", padx=5)
+        # Format Selection: Radio buttons for MP4 or MP3
+        fmt_frame = ttk.LabelFrame(self.root, text="Output Format")
+        fmt_frame.pack(fill="x", padx=10, pady=5)
         self.format_var = tk.StringVar(value="mp4")
-        format_options = ["mp3", "mp4", "mkv", "webm"]
-        self.format_dropdown = ttk.OptionMenu(format_frame, self.format_var, self.format_var.get(), *format_options)
-        self.format_dropdown.pack(side="left", padx=5)
+        ttk.Radiobutton(fmt_frame, text="MP4 (Video + Audio)", variable=self.format_var, value="mp4").pack(side="left", padx=10)
+        ttk.Radiobutton(fmt_frame, text="MP3 (Audio Only)", variable=self.format_var, value="mp3").pack(side="left", padx=10)
         
-        # Output Directory Frame
+        # Output Directory
         out_dir_frame = ttk.LabelFrame(self.root, text="Output Directory")
         out_dir_frame.pack(fill="x", padx=10, pady=5)
         self.out_dir_var = tk.StringVar(value=DEFAULT_OUTPUT_DIR)
-        self.out_dir_label = ttk.Label(out_dir_frame, textvariable=self.out_dir_var)
-        self.out_dir_label.pack(side="left", padx=5)
-        ttk.Button(out_dir_frame, text="Browse...", command=self.browse_output_dir).pack(side="left", padx=5)
+        ttk.Label(out_dir_frame, textvariable=self.out_dir_var).pack(side="left", padx=5)
+        ttk.Button(out_dir_frame, text="Browse...", command=self.browse_out_dir).pack(side="left", padx=5)
         
-        # Preset Frame
-        preset_frame = ttk.LabelFrame(self.root, text="Presets")
-        preset_frame.pack(fill="x", padx=10, pady=5)
-        ttk.Button(preset_frame, text="Save Preset", command=self.save_preset).pack(side="left", padx=5)
-        ttk.Button(preset_frame, text="Load Preset", command=self.load_preset).pack(side="left", padx=5)
-        
-        # Control Buttons Frame
-        control_frame = ttk.Frame(self.root)
-        control_frame.pack(fill="x", padx=10, pady=5)
-        self.download_btn = ttk.Button(control_frame, text="Download", command=self.start_download)
+        # Control Buttons
+        ctrl_frame = ttk.Frame(self.root)
+        ctrl_frame.pack(fill="x", padx=10, pady=5)
+        self.download_btn = ttk.Button(ctrl_frame, text="Download", command=self.start_download)
         self.download_btn.pack(side="left", padx=5)
-        self.cancel_btn = ttk.Button(control_frame, text="Cancel", command=self.cancel_download, state="disabled")
+        self.cancel_btn = ttk.Button(ctrl_frame, text="Cancel", command=self.cancel_download, state="disabled")
         self.cancel_btn.pack(side="left", padx=5)
-        self.update_btn = ttk.Button(control_frame, text="Update yt-dlp", command=self.update_yt_dlp)
+        self.update_btn = ttk.Button(ctrl_frame, text="Update yt-dlp", command=self.update_yt_dlp)
         self.update_btn.pack(side="left", padx=5)
+        self.open_dir_btn = ttk.Button(ctrl_frame, text="Open Directory", command=self.open_directory, state="disabled")
+        self.open_dir_btn.pack(side="left", padx=5)
+        self.open_file_btn = ttk.Button(ctrl_frame, text="Launch File", command=self.open_file, state="disabled")
+        self.open_file_btn.pack(side="left", padx=5)
         
-        # Progress Bar
+        # ETA Label and Progress Bar
+        self.eta_label = ttk.Label(self.root, text="ETA: N/A")
+        self.eta_label.pack(fill="x", padx=10, pady=(5,0))
         self.progress = ttk.Progressbar(self.root, orient="horizontal", mode="determinate", maximum=100)
         self.progress.pack(fill="x", padx=10, pady=5)
         
-        # Logging/Console Window
+        # Log window
         log_frame = ttk.LabelFrame(self.root, text="Log")
         log_frame.pack(fill="both", padx=10, pady=5, expand=True)
         self.log_text = tk.Text(log_frame, height=10, state="disabled", wrap="word")
         self.log_text.pack(side="left", fill="both", expand=True)
         log_scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         log_scroll.pack(side="right", fill="y")
-        self.log_text['yscrollcommand'] = log_scroll.set
+        self.log_text["yscrollcommand"] = log_scroll.set
 
     def log(self, message):
         self.log_text.config(state="normal")
         self.log_text.insert("end", message + "\n")
         self.log_text.see("end")
         self.log_text.config(state="disabled")
-    
-    def browse_output_dir(self):
-        directory = filedialog.askdirectory(initialdir=self.out_dir_var.get())
-        if directory:
-            self.out_dir_var.set(directory)
-    
+
+    def browse_out_dir(self):
+        folder = filedialog.askdirectory(initialdir=self.out_dir_var.get())
+        if folder:
+            self.out_dir_var.set(folder)
+
+    def format_time(self, h, m, s):
+        hh = h.strip() or "00"
+        mm = m.strip() or "00"
+        ss = s.strip() or "00"
+        if hh == "00" and mm == "00" and ss == "00":
+            return None
+        return f"{hh.zfill(2)}:{mm.zfill(2)}:{ss.zfill(2)}"
+
     def build_command(self):
         cmd = ["yt-dlp"]
         url = self.url_entry.get().strip()
         if not url:
             messagebox.showerror("Error", "Please enter a URL.")
             return None
-        
         cmd.append(url)
         
-        fmt = self.format_var.get().lower()
-        if self.audio_only_var.get():
-            cmd.extend(["-x", "--audio-format", fmt])
-        else:
-            if fmt == "mp4":
-                # Try to get mp4 video with m4a audio, but fallback to any available formats
-                cmd.extend(["-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio"])
-            else:
-                cmd.extend(["-f", "bestvideo+bestaudio"])
+        # If Subs Only is checked, add flag
+        if self.subs_only_var.get():
+            cmd.append("--skip-download")
+        
+        # Format logic
+        if not self.subs_only_var.get():
+            fmt = self.format_var.get().lower()
+            if fmt == "mp3":
+                cmd.extend(["-x", "--audio-format", "mp3"])
+            else:  # mp4: always choose highest quality combined stream
+                cmd.extend(["-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"])
         
         # Time segments
-        start = self.start_time_entry.get().strip()
-        end = self.end_time_entry.get().strip()
+        start = self.format_time(self.start_h.get(), self.start_m.get(), self.start_s.get())
+        end = self.format_time(self.end_h.get(), self.end_m.get(), self.end_s.get())
         if start or end:
-            segment = ""
-            if start:
-                segment += start
-            segment += "-"
-            if end:
-                segment += end
+            segment = f"{start if start else ''}-{end if end else ''}"
             cmd.extend(["--download-sections", f"*{segment}"])
         
-        # Playlist
+        # Playlist option
         if self.playlist_var.get():
             cmd.append("--yes-playlist")
         else:
             cmd.append("--no-playlist")
         
-        # Subtitles
-        if self.write_subs_var.get():
+        # Subtitles: if "Download Subs" is checked, add both flags.
+        if self.subs_var.get():
             cmd.append("--write-subs")
-        if self.write_auto_subs_var.get():
             cmd.append("--write-auto-subs")
         
-        # Output template: using chosen directory and filename template
+        # Output template: using chosen output directory
         out_dir = self.out_dir_var.get()
-        output_template = os.path.join(out_dir, "%(title)s-%(id)s.%(ext)s")
-        cmd.extend(["-o", output_template])
+        tmpl = os.path.join(out_dir, "%(title)s-%(id)s.%(ext)s")
+        cmd.extend(["-o", tmpl])
         
         return cmd
 
@@ -156,35 +172,46 @@ class YTDownloaderApp:
         cmd = self.build_command()
         if not cmd:
             return
-        
         self.log("Starting download with command: " + " ".join(cmd))
+        self.downloaded_file = None
+        self.eta_label.config(text="ETA: N/A")
+        self.open_dir_btn.config(state="disabled")
+        self.open_file_btn.config(state="disabled")
         self.download_btn.config(state="disabled")
         self.cancel_btn.config(state="normal")
         self.progress["value"] = 0
         
-        # Run download in a separate thread
         threading.Thread(target=self.run_command, args=(cmd,), daemon=True).start()
 
     def run_command(self, cmd):
         try:
-            # Launch subprocess; capture both stdout and stderr
             self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-            # Read output line by line
             for line in self.process.stdout:
-                self.log(line.strip())
-                # Try to parse a percentage (e.g., "12.3%")
-                match = re.search(r'(\d+\.\d+)%', line)
-                if match:
-                    try:
-                        percent = float(match.group(1))
-                        self.progress["value"] = percent
-                    except ValueError:
-                        pass
+                line = line.strip()
+                # Update ETA and progress if line contains "[download]" and "ETA"
+                if line.startswith("[download]") and "ETA" in line:
+                    eta_match = re.search(r'ETA\s+([\d:]+)', line)
+                    if eta_match:
+                        self.eta_label.config(text=f"ETA: {eta_match.group(1)}")
+                    pct_match = re.search(r'(\d+\.\d+)%', line)
+                    if pct_match:
+                        try:
+                            self.progress["value"] = float(pct_match.group(1))
+                        except ValueError:
+                            pass
+                    continue  # skip logging raw progress line
+                else:
+                    self.log(line)
+                # Capture destination for non-playlist downloads
+                if "--yes-playlist" not in cmd:
+                    dest_match = re.search(r"Destination:\s*(.+)", line)
+                    if dest_match:
+                        self.downloaded_file = dest_match.group(1).strip()
             self.process.wait()
             if self.process.returncode == 0:
                 self.log("Download completed successfully.")
             else:
-                self.log("Download finished with errors (code {}).".format(self.process.returncode))
+                self.log(f"Download finished with errors (code {self.process.returncode}).")
         except Exception as e:
             self.log("Error during download: " + str(e))
         finally:
@@ -192,6 +219,11 @@ class YTDownloaderApp:
             self.download_btn.config(state="normal")
             self.cancel_btn.config(state="disabled")
             self.progress["value"] = 0
+            self.open_dir_btn.config(state="normal")
+            if self.downloaded_file:
+                self.open_file_btn.config(state="normal")
+            else:
+                self.open_file_btn.config(state="disabled")
 
     def cancel_download(self):
         if self.process:
@@ -204,7 +236,6 @@ class YTDownloaderApp:
 
     def update_yt_dlp(self):
         self.log("Updating yt-dlp...")
-        # Run "yt-dlp -U" in a separate thread
         threading.Thread(target=self.run_update, daemon=True).start()
         
     def run_update(self):
@@ -217,50 +248,23 @@ class YTDownloaderApp:
         except Exception as e:
             self.log("Error during update: " + str(e))
         
-    def save_preset(self):
-        preset = {
-            "url": self.url_entry.get().strip(),
-            "start_time": self.start_time_entry.get().strip(),
-            "end_time": self.end_time_entry.get().strip(),
-            "audio_only": self.audio_only_var.get(),
-            "playlist": self.playlist_var.get(),
-            "write_subs": self.write_subs_var.get(),
-            "write_auto_subs": self.write_auto_subs_var.get(),
-            "format": self.format_var.get(),
-            "out_dir": self.out_dir_var.get()
-        }
-        file_path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON files", "*.json")])
-        if file_path:
-            try:
-                with open(file_path, "w") as f:
-                    json.dump(preset, f, indent=4)
-                self.log("Preset saved to " + file_path)
-            except Exception as e:
-                self.log("Error saving preset: " + str(e))
+    def open_directory(self):
+        out_dir = self.out_dir_var.get()
+        try:
+            os.startfile(out_dir)
+        except Exception as e:
+            self.log("Error opening directory: " + str(e))
     
-    def load_preset(self):
-        file_path = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
-        if file_path:
+    def open_file(self):
+        if self.downloaded_file and os.path.isfile(self.downloaded_file):
             try:
-                with open(file_path, "r") as f:
-                    preset = json.load(f)
-                self.url_entry.delete(0, "end")
-                self.url_entry.insert(0, preset.get("url", ""))
-                self.start_time_entry.delete(0, "end")
-                self.start_time_entry.insert(0, preset.get("start_time", ""))
-                self.end_time_entry.delete(0, "end")
-                self.end_time_entry.insert(0, preset.get("end_time", ""))
-                self.audio_only_var.set(preset.get("audio_only", False))
-                self.playlist_var.set(preset.get("playlist", False))
-                self.write_subs_var.set(preset.get("write_subs", False))
-                self.write_auto_subs_var.set(preset.get("write_auto_subs", False))
-                self.format_var.set(preset.get("format", "mp4"))
-                self.out_dir_var.set(preset.get("out_dir", DEFAULT_OUTPUT_DIR))
-                self.log("Preset loaded from " + file_path)
+                os.startfile(self.downloaded_file)
             except Exception as e:
-                self.log("Error loading preset: " + str(e))
-        
+                self.log("Error launching file: " + str(e))
+        else:
+            self.log("No downloaded file found.")
+
 if __name__ == "__main__":
     root = tk.Tk()
-    app = YTDownloaderApp(root)
+    app = SimpleDownloaderApp(root)
     root.mainloop()
