@@ -3,18 +3,36 @@ import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import whisper
+import subprocess  # For non-Windows systems if needed
 
 # Function to browse and select an MP3 file
 def browse_mp3():
     path = filedialog.askopenfilename(filetypes=[("Audio Files", "*.mp3 *.wav *.m4a")])
     if path:
         audio_path.set(path)
+        status_label.config(text="Ready to transcribe.")
 
-# Function to transcribe the chosen MP3 file and save full transcript and segments
+# Function to open the directory containing the transcript files
+def open_directory():
+    if not audio_path.get():
+        messagebox.showerror("Error", "No file selected to determine the directory.")
+        return
+    directory = os.path.dirname(audio_path.get())
+    try:
+        os.startfile(directory)
+    except AttributeError:
+        subprocess.Popen(["xdg-open", directory])
+    except Exception as e:
+        messagebox.showerror("Error", f"Could not open directory: {e}")
+
+# Function to transcribe the chosen audio file and save full transcript and segments
 def transcribe_audio():
     if not audio_path.get():
-        messagebox.showerror("Error", "Please choose an MP3 file first.")
+        messagebox.showerror("Error", "Please choose an audio file first.")
         return
+
+    status_label.config(text="Transcribing...")
+    root.update()  # Refresh the GUI
 
     # Load model (change "base" to another model size if needed)
     model = whisper.load_model("base")
@@ -34,6 +52,7 @@ def transcribe_audio():
             text = segment['text'].strip()
             f.write(f"[{start} - {end}] {text}\n")
 
+    status_label.config(text="Transcription completed!")
     messagebox.showinfo("Success", f"Transcription completed!\nFull transcript saved to:\n{full_transcript_path}\nSegments saved to:\n{segments_path}")
 
 # Function to browse and select a segments text file for parsing
@@ -74,7 +93,6 @@ def parse_segments():
         for seg in segments[1:]:
             duration = current["end"] - current["start"]
             if duration < threshold:
-                # Extend the current segment by merging with the next one
                 current["end"] = seg["end"]
                 current["text"] += " " + seg["text"]
             else:
@@ -104,8 +122,13 @@ segments_file_path = tk.StringVar()
 trans_frame = tk.LabelFrame(root, text="Transcription", padx=10, pady=10)
 trans_frame.pack(padx=10, pady=10, fill="x")
 
-tk.Button(trans_frame, text="Browse MP3", command=browse_mp3).pack(side="left")
+tk.Button(trans_frame, text="Browse Audio", command=browse_mp3).pack(side="left")
 tk.Button(trans_frame, text="Transcribe", command=transcribe_audio).pack(side="left", padx=10)
+tk.Button(trans_frame, text="Open Directory", command=open_directory).pack(side="left", padx=10)
+
+# Status label for transcription process
+status_label = tk.Label(trans_frame, text="Idle")
+status_label.pack(side="left", padx=10)
 
 # === Segment Parser Frame ===
 parse_frame = tk.LabelFrame(root, text="Segment Parser", padx=10, pady=10)
