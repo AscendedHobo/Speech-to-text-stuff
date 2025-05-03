@@ -143,3 +143,4 @@ tk.Button(parse_frame, text="Browse Segments File", command=browse_segments_file
 tk.Button(parse_frame, text="Parse Segments", command=parse_segments).pack(side="left")
 
 root.mainloop()
+    
