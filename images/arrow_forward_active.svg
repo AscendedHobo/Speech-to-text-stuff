@@ -1,0 +1,5 @@
+<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Arrow Forward Button -->
+  <rect x="10" y="10" width="80" height="80" rx="10" fill="#4285F4" />
+  <path d="M35 25 L65 50 L35 75" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

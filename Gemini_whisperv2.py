@@ -1,4 +1,3 @@
-# Gemini_Whisper.py
 import os
 import re
 import tkinter as tk
@@ -6,9 +5,8 @@ from tkinter import filedialog, messagebox, scrolledtext, Listbox, Scrollbar, Bo
 import whisper
 import subprocess
 import platform
-import time # For status updates
-import datetime # Added for date operations
-# from datetime import date # Not strictly needed as datetime.date is used
+import time
+import datetime
 
 # Import TkinterDnD for drag and drop functionality
 try:
@@ -21,9 +19,6 @@ except ImportError:
 
 # Global list to store selected audio file paths
 selected_audio_files = []
-
-# Directory for "Convert today's drive" feature
-TARGET_VOICE_RECORDINGS_DIR = r"G:\My Drive\Voice Recordings" # Use raw string for Windows paths
 
 # Function to browse and select multiple audio files
 def browse_multi_audio():
@@ -69,9 +64,7 @@ def open_directory():
         dir_to_open = os.path.dirname(full_transcript_path_display.get())
     elif selected_audio_files:
         dir_to_open = os.path.dirname(selected_audio_files[0])
-    elif os.path.isdir(TARGET_VOICE_RECORDINGS_DIR):
-        dir_to_open = TARGET_VOICE_RECORDINGS_DIR
-
+    
     if not dir_to_open:
         messagebox.showerror("Error", "No files selected or processed yet to determine a relevant directory.")
         return
@@ -91,7 +84,7 @@ def open_directory():
 
 
 # Function to transcribe the chosen audio files
-def transcribe_audio(custom_combined_save_path=None):
+def transcribe_audio():
     global selected_audio_files
     selected_model = model_size.get()
     combine_output = combine_output_var.get()
@@ -111,7 +104,7 @@ def transcribe_audio(custom_combined_save_path=None):
     root.update()
 
     try:
-        start_time_transcription_total = time.time() # For ETA calculation
+        start_time_transcription_total = time.time()
         model = whisper.load_model(selected_model)
         status_label.config(text=f"Model '{selected_model}' loaded.")
         root.update()
@@ -126,10 +119,9 @@ def transcribe_audio(custom_combined_save_path=None):
         for i, audio_file in enumerate(selected_audio_files):
             current_filename = os.path.basename(audio_file)
             status_label.config(text=f"Transcribing file {i+1}/{total_files}: {current_filename}...")
-            progress_bar['value'] = i # Progress before starting current file
+            progress_bar['value'] = i
             root.update()
 
-            # Calculate and update ETA
             if i > 0:
                 elapsed_time = time.time() - start_time_transcription_total
                 avg_time_per_file = elapsed_time / i
@@ -138,11 +130,10 @@ def transcribe_audio(custom_combined_save_path=None):
                 eta_minutes = int(eta_seconds_val // 60)
                 eta_seconds_display = int(eta_seconds_val % 60)
                 eta_display.set(f"ETA: {eta_minutes:02d}:{eta_seconds_display:02d}")
-            elif i == 0 and total_files > 1: # For the first file if multiple exist
+            elif i == 0 and total_files > 1:
                 eta_display.set(f"ETA: Processing first...")
 
-
-            root.update() # Ensure ETA is displayed before potential long operation
+            root.update()
 
             try:
                 result = model.transcribe(audio_file, fp16=False)
@@ -158,7 +149,7 @@ def transcribe_audio(custom_combined_save_path=None):
                 try:
                     file_creation_time = os.path.getctime(audio_file)
                     creation_datetime = datetime.datetime.fromtimestamp(file_creation_time)
-                    formatted_datetime = creation_datetime.strftime("%d %b %Y, %H:%M:%S") # Using %b for abbreviated month
+                    formatted_datetime = creation_datetime.strftime("%d %b %Y, %H:%M:%S")
                 except Exception as e_time:
                     print(f"Could not get creation time for {audio_file}: {e_time}")
                     formatted_datetime = "Unknown Time"
@@ -193,7 +184,6 @@ def transcribe_audio(custom_combined_save_path=None):
                 status_label.config(text=f"Error on file {i+1}: {current_filename}. Skipping.")
                 time.sleep(1)
             
-            # Update progress bar after current file is processed (or attempted)
             progress_bar['value'] = i + 1
             root.update()
 
@@ -201,38 +191,30 @@ def transcribe_audio(custom_combined_save_path=None):
         final_message = ""
         if combine_output:
             if combined_transcript_text:
-                resolved_combined_save_path = custom_combined_save_path
-                user_action_needed_for_save = False
-
-                if not resolved_combined_save_path:
-                    user_action_needed_for_save = True
-                    resolved_combined_save_path = filedialog.asksaveasfilename(
-                        title="Save Combined Transcript As",
-                        defaultextension=".txt",
-                        filetypes=[("Text Files", "*.txt")],
-                        initialfile="combined_transcript.txt",
-                        initialdir=os.path.dirname(selected_audio_files[0]) if selected_audio_files else None
-                    )
+                resolved_combined_save_path = filedialog.asksaveasfilename(
+                    title="Save Combined Transcript As",
+                    defaultextension=".txt",
+                    filetypes=[("Text Files", "*.txt")],
+                    initialfile="combined_transcript.txt",
+                    initialdir=os.path.dirname(selected_audio_files[0]) if selected_audio_files else None
+                )
 
                 if resolved_combined_save_path:
                     try:
                         with open(resolved_combined_save_path, "w", encoding="utf-8") as f:
                             f.write(combined_transcript_text)
-                        if custom_combined_save_path:
-                             final_message += f"Combined transcript automatically saved to:\n{resolved_combined_save_path}\n\n"
-                        else:
-                             final_message += f"Combined transcript saved to:\n{resolved_combined_save_path}\n\n"
+                        final_message += f"Combined transcript saved to:\n{resolved_combined_save_path}\n\n"
                         full_transcript_path_display.set(resolved_combined_save_path)
                     except Exception as e:
                         error_msg = f"Error saving combined transcript to {resolved_combined_save_path}: {e}"
                         final_message += error_msg + "\n\n"
                         messagebox.showerror("Save Error", error_msg)
-                elif user_action_needed_for_save:
+                else:
                     final_message += "Combined transcript saving cancelled by user.\n\n"
             else:
                  final_message += "No successful transcriptions to combine.\n\n"
 
-        progress_bar['value'] = total_files # Ensure it's full
+        progress_bar['value'] = total_files
         eta_display.set("ETA: Completed" if processed_files_count > 0 else "ETA: N/A")
         status_label.config(text="Transcription process finished.")
         final_message += f"Processed {processed_files_count} out of {total_files} files."
@@ -258,87 +240,6 @@ def transcribe_audio(custom_combined_save_path=None):
         messagebox.showerror("Transcription Error", f"An error occurred: {e}")
 
 
-# Common function for "Convert today's drive" with model selection
-def convert_todays_drive_action(selected_model_size="large"):
-    global selected_audio_files
-
-    status_label.config(text=f"Scanning {TARGET_VOICE_RECORDINGS_DIR}...")
-    progress_bar['value'] = 0
-    eta_display.set("ETA: N/A")
-    root.update()
-
-    if not os.path.isdir(TARGET_VOICE_RECORDINGS_DIR):
-        messagebox.showerror("Error", f"Directory not found: {TARGET_VOICE_RECORDINGS_DIR}")
-        status_label.config(text=f"Error: Target directory '{TARGET_VOICE_RECORDINGS_DIR}' not found.")
-        return
-
-    today_date_obj = datetime.date.today()
-    found_files_for_today = []
-    file_pattern = re.compile(r"Recording (\d+)\.wav$", re.IGNORECASE)
-
-    try:
-        for filename in os.listdir(TARGET_VOICE_RECORDINGS_DIR):
-            match = file_pattern.match(filename)
-            if match:
-                file_path = os.path.join(TARGET_VOICE_RECORDINGS_DIR, filename)
-                try:
-                    file_mod_time = os.path.getmtime(file_path)
-                    file_mod_date = datetime.date.fromtimestamp(file_mod_time)
-                    if file_mod_date == today_date_obj:
-                        recording_number = int(match.group(1))
-                        found_files_for_today.append((recording_number, file_path))
-                except ValueError:
-                    print(f"Warning: Could not parse recording number from {filename}")
-                except Exception as e:
-                    print(f"Warning: Could not process file {filename}: {e}")
-    except Exception as e:
-        messagebox.showerror("Error", f"Error reading directory {TARGET_VOICE_RECORDINGS_DIR}: {e}")
-        status_label.config(text="Error: Could not read target directory.")
-        return
-
-    if not found_files_for_today:
-        messagebox.showinfo("Info", f"No recordings matching 'Recording <number>.wav' found for today ({today_date_obj.strftime('%Y-%m-%d')}) in {TARGET_VOICE_RECORDINGS_DIR}.")
-        status_label.config(text="No recordings found for today.")
-        selected_audio_files.clear()
-        audio_listbox.delete(0, END)
-        clear_output_displays()
-        progress_bar['value'] = 0
-        eta_display.set("ETA: N/A")
-        return
-
-    found_files_for_today.sort(key=lambda x: x[0])
-    selected_audio_files = [path for _, path in found_files_for_today]
-
-    audio_listbox.delete(0, END)
-    for path in selected_audio_files:
-        audio_listbox.insert(END, os.path.basename(path))
-    clear_output_displays()
-    progress_bar['value'] = 0
-    eta_display.set("ETA: N/A")
-
-    status_label.config(text=f"Found {len(selected_audio_files)} recordings. Setting up for transcription with {selected_model_size} model...")
-    root.update()
-
-    model_size.set(selected_model_size)
-    combine_output_var.set(True)
-    output_filename = f"{today_date_obj.strftime('%Y-%m-%d')} transcription combined ({selected_model_size}).txt"
-    target_combined_save_path = os.path.join(TARGET_VOICE_RECORDINGS_DIR, output_filename)
-
-    transcribe_audio(custom_combined_save_path=target_combined_save_path)
-
-    selected_audio_files.clear()
-    audio_listbox.delete(0, END)
-
-
-# Function for "Convert today's drive" with large model
-def convert_todays_drive_large():
-    convert_todays_drive_action(selected_model_size="large")
-
-# Function for "Convert today's drive" with medium model
-def convert_todays_drive_medium():
-    convert_todays_drive_action(selected_model_size="medium")
-
-
 # Function to browse and select a SINGLE segments text file for parsing
 def browse_segments_file():
     initial_dir = None
@@ -346,9 +247,7 @@ def browse_segments_file():
         initial_dir = os.path.dirname(segments_path_display.get())
     elif selected_audio_files:
          initial_dir = os.path.dirname(selected_audio_files[0])
-    elif os.path.isdir(TARGET_VOICE_RECORDINGS_DIR):
-        initial_dir = TARGET_VOICE_RECORDINGS_DIR
-
+    
     path = filedialog.askopenfilename(
         title="Select Segments File to Parse",
         filetypes=[("Text Files", "*.txt")],
@@ -449,11 +348,8 @@ def handle_drag_enter(event):
 
 def handle_drag_leave(event):
     if TKDND_AVAILABLE:
-        # Check if the mouse is leaving the drop_label to go to listbox_frame or vice-versa
-        # This check prevents flickering if the drag moves between elements within the drop zone.
-        # A simpler approach is to just reset, as TkinterDnD might re-trigger enter quickly.
-        listbox_frame.config(bg="#f0f0f0")
-        drop_label.config(bg="#f0f0f0", fg="#666666", text="Drag & Drop Audio Files Here")
+        listbox_frame.config(bg=root.cget('bg')) # Reset to default window background
+        drop_label.config(bg=root.cget('bg'), fg="#666666", text="Drag & Drop Audio Files Here")
 
 def handle_drop_files(event):
     global selected_audio_files
@@ -466,21 +362,18 @@ def handle_drop_files(event):
     if not dropped_data_string:
         return
 
-    # Robustly parse paths from TkinterDnD's string format
-    # Format can be: {path with spaces} path_without_spaces {another path with spaces}
     path_candidates = re.findall(r'\{.*?\}|\S+', dropped_data_string)
     
     parsed_paths = []
     for cand in path_candidates:
         if cand.startswith('{') and cand.endswith('}'):
-            parsed_paths.append(cand[1:-1]) # Remove braces
+            parsed_paths.append(cand[1:-1])
         else:
             parsed_paths.append(cand)
 
     valid_audio_files = []
     valid_extensions = ('.mp3', '.wav', '.m4a')
     for path_str in parsed_paths:
-        # Clean path (e.g., remove potential surrounding quotes if any OS/app adds them)
         clean_path = path_str.strip('\'"')
         if os.path.isfile(clean_path) and clean_path.lower().endswith(valid_extensions):
             valid_audio_files.append(clean_path)
@@ -488,7 +381,7 @@ def handle_drop_files(event):
             print(f"Skipping invalid or non-audio file from drop: {path_str}")
     
     if valid_audio_files:
-        selected_audio_files = valid_audio_files # Replace current selection with dropped files
+        selected_audio_files = valid_audio_files
         audio_listbox.delete(0, END)
         for path in selected_audio_files:
             audio_listbox.insert(END, os.path.basename(path))
@@ -497,11 +390,8 @@ def handle_drop_files(event):
         progress_bar['value'] = 0
         eta_display.set("ETA: N/A")
         status_label.config(text=f"{len(selected_audio_files)} file(s) dropped. Ready.")
-    elif dropped_data_string: # Data was dropped, but no valid files found
+    elif dropped_data_string:
         status_label.config(text="No valid audio files found in dropped items.")
-        # Optionally clear list if no valid files and user expects replacement
-        # selected_audio_files.clear()
-        # audio_listbox.delete(0, END)
 
 # --- GUI Setup ---
 if TKDND_AVAILABLE:
@@ -510,9 +400,27 @@ else:
     root = tk.Tk()
 
 root.title("Gemini Whisper: Multi-Transcription & Segment Parser")
+root.geometry("800x700") # Set a default window size
+root.resizable(True, True)
+
+# Apply a modern theme
+style = ttk.Style()
+style.theme_use('clam') # 'clam', 'alt', 'default', 'classic'
+
+# Configure styles for widgets
+style.configure('TFrame', background='#f0f0f0')
+style.configure('TLabelFrame', background='#f0f0f0', font=('Helvetica', 10, 'bold'))
+style.configure('TLabel', background='#f0f0f0', font=('Helvetica', 9))
+style.configure('TButton', font=('Helvetica', 9, 'bold'), padding=5)
+style.map('TButton', background=[('active', '#e0e0e0')])
+style.configure('TRadiobutton', background='#f0f0f0', font=('Helvetica', 9))
+style.configure('TCheckbutton', background='#f0f0f0', font=('Helvetica', 9))
+style.configure('TEntry', fieldbackground='white', font=('Helvetica', 9))
+style.configure('TProgressbar', thickness=10)
+style.configure('TListbox', font=('Helvetica', 9)) # No direct TListbox style, but for consistency
 
 # Variables
-model_size = tk.StringVar(value="base")
+model_size = tk.StringVar(value="large") # Default to large
 combine_output_var = BooleanVar(value=False)
 segments_file_path = tk.StringVar()
 full_transcript_path_display = tk.StringVar()
@@ -522,129 +430,126 @@ eta_display = tk.StringVar(value="ETA: N/A")
 
 
 # === Model Selection Frame ===
-model_frame = tk.LabelFrame(root, text="1. Select Whisper Model Size", padx=10, pady=10)
+model_frame = ttk.LabelFrame(root, text="1. Select Whisper Model Size", padding=(10, 10))
 model_frame.pack(padx=10, pady=5, fill="x")
-tk.Radiobutton(model_frame, text="Tiny", variable=model_size, value="tiny").pack(anchor="w")
-tk.Radiobutton(model_frame, text="Base", variable=model_size, value="base").pack(anchor="w")
-tk.Radiobutton(model_frame, text="Small", variable=model_size, value="small").pack(anchor="w")
-tk.Radiobutton(model_frame, text="Medium", variable=model_size, value="medium").pack(anchor="w")
-tk.Radiobutton(model_frame, text="Large (Slowest, Accurate)", variable=model_size, value="large").pack(anchor="w")
+
+model_options_frame = ttk.Frame(model_frame)
+model_options_frame.pack(fill="x")
+
+ttk.Radiobutton(model_options_frame, text="Tiny (Fastest, Least Accurate)", variable=model_size, value="tiny").grid(row=0, column=0, sticky="w", padx=5, pady=2)
+ttk.Radiobutton(model_options_frame, text="Base", variable=model_size, value="base").grid(row=1, column=0, sticky="w", padx=5, pady=2)
+ttk.Radiobutton(model_options_frame, text="Small", variable=model_size, value="small").grid(row=2, column=0, sticky="w", padx=5, pady=2)
+ttk.Radiobutton(model_options_frame, text="Medium", variable=model_size, value="medium").grid(row=3, column=0, sticky="w", padx=5, pady=2)
+ttk.Radiobutton(model_options_frame, text="Large (Slowest, Most Accurate)", variable=model_size, value="large").grid(row=4, column=0, sticky="w", padx=5, pady=2)
+
 
 # === Transcription Frame ===
-trans_frame = tk.LabelFrame(root, text="2. Manual Transcription", padx=10, pady=10)
+trans_frame = ttk.LabelFrame(root, text="2. Transcribe Audio Files", padding=(10, 10))
 trans_frame.pack(padx=10, pady=10, fill="x")
 
-row1_trans = tk.Frame(trans_frame)
-row1_trans.pack(fill="x", pady=(0, 5))
-tk.Button(row1_trans, text="Browse Audio Files", command=browse_multi_audio).pack(side="left")
+# Browse and Drop Zone
+browse_drop_frame = ttk.Frame(trans_frame)
+browse_drop_frame.pack(fill="x", pady=(0, 5))
 
-listbox_frame = tk.Frame(row1_trans, bd=2, relief=tk.GROOVE, bg="#f0f0f0") # Initial bg color
-listbox_frame.pack(side="left", fill="x", expand=True, padx=10)
+ttk.Button(browse_drop_frame, text="Browse Audio Files", command=browse_multi_audio).pack(side="left", padx=(0, 10))
 
-drop_label = tk.Label(listbox_frame, text="Drag & Drop Audio Files Here", bg="#f0f0f0", fg="#666666") # Initial bg color
-drop_label.pack(fill="x", pady=(2, 0))
+listbox_frame = ttk.Frame(browse_drop_frame, relief=tk.GROOVE, borderwidth=2)
+listbox_frame.pack(side="left", fill="both", expand=True)
 
-audio_scrollbar = Scrollbar(listbox_frame, orient="vertical")
-audio_listbox = Listbox(listbox_frame, height=4, width=50, yscrollcommand=audio_scrollbar.set, selectmode=MULTIPLE)
+drop_label = ttk.Label(listbox_frame, text="Drag & Drop Audio Files Here", anchor="center", foreground="#666666")
+drop_label.pack(fill="x", pady=(5, 0))
+
+audio_scrollbar = ttk.Scrollbar(listbox_frame, orient="vertical")
+audio_listbox = Listbox(listbox_frame, height=4, yscrollcommand=audio_scrollbar.set, selectmode=MULTIPLE, relief=tk.FLAT)
 audio_scrollbar.config(command=audio_listbox.yview)
 audio_scrollbar.pack(side="right", fill="y")
-audio_listbox.pack(side="left", fill="x", expand=True, pady=(0, 2))
+audio_listbox.pack(side="left", fill="both", expand=True, pady=(0, 5))
 
 if TKDND_AVAILABLE:
-    # Registering the whole listbox_frame as a primary drop target can be smoother
     listbox_frame.drop_target_register(DND_FILES)
     listbox_frame.dnd_bind('<<Drop>>', handle_drop_files)
     listbox_frame.dnd_bind('<<DragEnter>>', handle_drag_enter)
     listbox_frame.dnd_bind('<<DragLeave>>', handle_drag_leave)
     
-    # Also bind to sub-widgets if direct drops on them are expected or to help with visual cues
-    drop_label.drop_target_register(DND_FILES) # Allow drop on label itself
+    drop_label.drop_target_register(DND_FILES)
     drop_label.dnd_bind('<<Drop>>', handle_drop_files)
-    drop_label.dnd_bind('<<DragEnter>>', handle_drag_enter) # Propagate visual cue
+    drop_label.dnd_bind('<<DragEnter>>', handle_drag_enter)
     drop_label.dnd_bind('<<DragLeave>>', handle_drag_leave)
 
-    audio_listbox.drop_target_register(DND_FILES) # Allow drop on listbox itself
+    audio_listbox.drop_target_register(DND_FILES)
     audio_listbox.dnd_bind('<<Drop>>', handle_drop_files)
-    audio_listbox.dnd_bind('<<DragEnter>>', handle_drag_enter) # Propagate visual cue
+    audio_listbox.dnd_bind('<<DragEnter>>', handle_drag_enter)
     audio_listbox.dnd_bind('<<DragLeave>>', handle_drag_leave)
 
 
-row2_trans = tk.Frame(trans_frame)
-row2_trans.pack(fill="x", pady=(5, 5))
-bold_font = ('Helvetica', 10, 'bold')
-transcribe_button = tk.Button(
-    row2_trans, text="Transcribe Selected Files", command=lambda: transcribe_audio(None),
-    bg="lightgreen", font=bold_font, relief=tk.RAISED, borderwidth=2
+# Transcribe Button and Options
+transcribe_options_frame = ttk.Frame(trans_frame)
+transcribe_options_frame.pack(fill="x", pady=(5, 5))
+
+transcribe_button = ttk.Button(
+    transcribe_options_frame, text="Start Transcription", command=transcribe_audio,
+    style='Accent.TButton' # Custom style for a more prominent button
 )
 transcribe_button.pack(side="left")
-tk.Checkbutton(row2_trans, text="Combine Full Transcripts into ONE file", variable=combine_output_var).pack(side="left", padx=15)
 
-row3_trans = tk.Frame(trans_frame)
-row3_trans.pack(fill="x", pady=(0, 5))
-status_label = tk.Label(row3_trans, text="Select model and audio file(s)")
-status_label.pack(side="left", padx=0)
-eta_label = tk.Label(row3_trans, textvariable=eta_display, width=20, anchor="e") # Anchor east
+ttk.Checkbutton(transcribe_options_frame, text="Combine Full Transcripts into ONE file", variable=combine_output_var).pack(side="left", padx=15)
+
+# Status and Progress
+status_progress_frame = ttk.Frame(trans_frame)
+status_progress_frame.pack(fill="x", pady=(0, 5))
+
+status_label = ttk.Label(status_progress_frame, text="Select model and audio file(s)")
+status_label.pack(side="left", padx=0, fill="x", expand=True)
+
+eta_label = ttk.Label(status_progress_frame, textvariable=eta_display, width=15, anchor="e")
 eta_label.pack(side="right", padx=5)
 
-row3b_trans = tk.Frame(trans_frame)
-row3b_trans.pack(fill="x", pady=(0, 5))
-progress_bar = ttk.Progressbar(row3b_trans, orient="horizontal", length=100, mode="determinate")
-progress_bar.pack(fill="x", expand=True, padx=5)
+progress_bar = ttk.Progressbar(trans_frame, orient="horizontal", length=100, mode="determinate")
+progress_bar.pack(fill="x", expand=True, padx=5, pady=(0, 5))
 
-row4_trans = tk.Frame(trans_frame)
-row4_trans.pack(fill="x", pady=(5, 0))
-tk.Label(row4_trans, text="Last/Combined Transcript:", width=22, anchor='w').pack(side="left")
-full_transcript_display_entry = tk.Entry(row4_trans, textvariable=full_transcript_path_display, state='readonly', width=60)
-full_transcript_display_entry.pack(side="left", fill="x", expand=True, padx=5)
+# Output Paths
+output_paths_frame = ttk.Frame(trans_frame)
+output_paths_frame.pack(fill="x", pady=(5, 0))
 
-row5_trans = tk.Frame(trans_frame)
-row5_trans.pack(fill="x")
-tk.Label(row5_trans, text="Last Individual Segments File:", width=22, anchor='w').pack(side="left")
-segments_display_entry = tk.Entry(row5_trans, textvariable=segments_path_display, state='readonly', width=60)
-segments_display_entry.pack(side="left", fill="x", expand=True, padx=5)
+ttk.Label(output_paths_frame, text="Last/Combined Transcript:").grid(row=0, column=0, sticky="w", pady=2)
+ttk.Entry(output_paths_frame, textvariable=full_transcript_path_display, state='readonly').grid(row=0, column=1, sticky="ew", padx=5, pady=2)
 
-# === Automated Daily Drive Conversion Frame ===
-drive_frame = tk.LabelFrame(root, text="Automated Daily Journaling (from G:\\My Drive\\Voice Recordings)", padx=10, pady=10)
-drive_frame.pack(padx=10, pady=(5,10), fill="x")
-buttons_frame = tk.Frame(drive_frame)
-buttons_frame.pack(fill="x", pady=5)
-tk.Button(buttons_frame, text="Convert Today's Drive (LARGE model)",
-          command=convert_todays_drive_large,
-          height=2, bg="lightblue", relief=tk.RAISED,
-          borderwidth=2).pack(side="left", fill="x", expand=True, padx=(0,5))
-tk.Button(buttons_frame, text="Convert Today's Drive (MEDIUM model)",
-          command=convert_todays_drive_medium,
-          height=2, bg="lightgreen", relief=tk.RAISED, # Changed color slightly for differentiation
-          borderwidth=2).pack(side="left", fill="x", expand=True, padx=(5,0))
+ttk.Label(output_paths_frame, text="Last Individual Segments File:").grid(row=1, column=0, sticky="w", pady=2)
+ttk.Entry(output_paths_frame, textvariable=segments_path_display, state='readonly').grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+
+output_paths_frame.grid_columnconfigure(1, weight=1)
 
 
 # === Segment Parser Frame ===
-parse_frame = tk.LabelFrame(root, text="3. Parse Individual Segments File (Optional)", padx=10, pady=10)
+parse_frame = ttk.LabelFrame(root, text="3. Parse Individual Segments File (Optional)", padding=(10, 10))
 parse_frame.pack(padx=10, pady=10, fill="x")
 
-row1_parse = tk.Frame(parse_frame)
-row1_parse.pack(fill="x", pady=(0, 5))
-tk.Label(row1_parse, text="Merge if gap < (sec):").pack(side="left")
-threshold_entry = tk.Entry(row1_parse, width=7)
+# Controls for parsing
+parse_controls_frame = ttk.Frame(parse_frame)
+parse_controls_frame.pack(fill="x", pady=(0, 5))
+
+ttk.Label(parse_controls_frame, text="Merge if gap < (sec):").pack(side="left")
+threshold_entry = ttk.Entry(parse_controls_frame, width=7)
 threshold_entry.insert(0, "1.0")
 threshold_entry.pack(side="left", padx=5)
-tk.Button(row1_parse, text="Browse Segments File", command=browse_segments_file).pack(side="left", padx=10)
-tk.Button(row1_parse, text="Parse Selected File", command=parse_segments).pack(side="left")
 
-row2_parse = tk.Frame(parse_frame)
-row2_parse.pack(fill="x", pady=(0, 5))
-tk.Label(row2_parse, text="Segments File to Parse:", width=20, anchor='w').pack(side="left")
-segments_input_display_entry = tk.Entry(row2_parse, textvariable=segments_file_path, state='readonly', width=60)
-segments_input_display_entry.pack(side="left", fill="x", expand=True, padx=5)
+ttk.Button(parse_controls_frame, text="Browse Segments File", command=browse_segments_file).pack(side="left", padx=(10, 5))
+ttk.Button(parse_controls_frame, text="Parse Selected File", command=parse_segments).pack(side="left")
 
-row3_parse = tk.Frame(parse_frame)
-row3_parse.pack(fill="x")
-tk.Label(row3_parse, text="Parsed Output File:", width=20, anchor='w').pack(side="left")
-parsed_segments_display_entry = tk.Entry(row3_parse, textvariable=parsed_segments_path_display, state='readonly', width=60)
-parsed_segments_display_entry.pack(side="left", fill="x", expand=True, padx=5)
+# Output paths for parsing
+parse_output_paths_frame = ttk.Frame(parse_frame)
+parse_output_paths_frame.pack(fill="x", pady=(5, 0))
+
+ttk.Label(parse_output_paths_frame, text="Segments File to Parse:").grid(row=0, column=0, sticky="w", pady=2)
+ttk.Entry(parse_output_paths_frame, textvariable=segments_file_path, state='readonly').grid(row=0, column=1, sticky="ew", padx=5, pady=2)
+
+ttk.Label(parse_output_paths_frame, text="Parsed Output File:").grid(row=1, column=0, sticky="w", pady=2)
+ttk.Entry(parse_output_paths_frame, textvariable=parsed_segments_path_display, state='readonly').grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+
+parse_output_paths_frame.grid_columnconfigure(1, weight=1)
 
 
 # === Output Directory Button ===
-tk.Button(root, text="Open Output/Audio Directory", command=open_directory).pack(pady=10)
+ttk.Button(root, text="Open Output/Audio Directory", command=open_directory).pack(pady=10)
 
 root.mainloop()
